@@ -1,0 +1,114 @@
+---
+title: "Exercise quality prediction"
+author: "Marie Le Bars"
+date: "Sunday, May 01, 2016"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+
+#Overview
+
+The data provides measurements from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. We will attempt to predict the quality of execution of the exercise. The outcome is the variable "classe", a factor with 5 levels (A, B, C, D, E). Per http://groupware.les.inf.puc-rio.br/har, class A corresponds to the specified execution of the exercise, while the other 4 classes correspond to common mistakes.
+
+
+
+#Required Libraries
+
+```{r}
+library(caret)
+library(randomForest)
+```
+
+
+
+#Getting and Cleaning the Data
+
+First we will download the data from the provided links and create 2 data sets "training" and "testing":
+```{r}
+## Download
+fileurl1 <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+## Changing all non-available variables to NA
+training <- read.csv(url(fileurl1), na.strings=c("NA","#DIV/0!",""))
+
+## Get dataset dimension
+dim(training)
+```
+
+
+With 160 variables we want to check first if some variables have near zero variances and can be removed.
+```{r}
+## Check for near zero variance
+nearzero <- nearZeroVar(training, saveMetrics = TRUE)
+
+## Remove from training dataset
+training <- training[, !nearzero$nzv]
+
+## Get dataset dimensions and structure
+dim(training); str(training)
+```
+
+
+We are now down to 124 variables (previous 160). Some variables seem to have a lot of NA. We'll check those with more than 80% NA and remove them.
+```{r}
+## Check NA
+NA80 <- sapply(colnames(training), function(x) return (sum(is.na(training[, x])) > 0.80*nrow(training)))
+
+## Remove variables with more than 80% of NA
+training <- training[, !NA80]
+
+## Get dataset dimensions and structure
+dim(training); str(training)
+```
+
+
+Finally, let's remove the first six columns: index, time stamps, user names. This cannot be used for prediction.
+```{r}
+## Removing first column
+training <- training[-(1:6)]
+
+## Get dataset dimensions
+dim(training)
+```
+
+
+The clean data set now has 53 variables which are neither mostly empty or too close to other variables. We can start the analysis.
+
+
+
+#Analysis
+
+The number of variables being still quite large, we'll use PCA to reduce the number of predictors and reduce the noise. We will use the rain forest model.
+```{r}
+## This creates a PCA 5 folds cross validation to be used in building the model
+train_control <- trainControl(method = "cv", number = 5, preProcOptions="pca")
+
+## This creates the rainforest model using PCA
+rf <- train(classe ~ ., data = training, method = "rf", trControl= train_control)
+
+## Results
+rf$results$Accuracy
+rf$finalModel
+```
+
+
+The rain forest models provides 0.99 accuracy so we will keep it to predict classe on the testing data set.
+
+
+#Prediction
+
+```{r}
+## Download test file
+fileurl2 <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+## Changing all non-available variables to NA
+testing <- read.csv(url(fileurl2), na.strings=c("NA","#DIV/0!",""))
+
+## Predict using rainforest model
+predictionRF <- predict(rf, testing)
+```
+
+
+These results have been successfully submitted in the Quiz and matched 100%
